@@ -1,74 +1,169 @@
-from asm_parser import Assembler
+from asm_parser import Assembler, read_program_file
 from uvm_spec import UVMSpec
 
-def test_stage1():
+def run_stage1(input_file, test_mode=False):
+    """Выполняет этап 1: перевод программы в промежуточное представление"""
     assembler = Assembler()
     
-    # Тестовая программа для проверки спецификации
-    test_program = """
-    ; Тест загрузки константы
-    LOAD 553
+    print("=== ЭТАП 1: Перевод программы в промежуточное представление ===")
+    print(f"Входной файл: {input_file}")
+    print("-" * 60)
     
-    ; Тест чтения из памяти  
-    READ 268
+    # Чтение программы из файла
+    source_code = read_program_file(input_file)
+    if source_code is None:
+        return
     
-    ; Тест записи в память
-    WRITE 617
-    
-    ; Тест вычитания
-    SUB 455
-    """
-    
-    print("=== ЭТАП 1: Перевод программы в промежуточное представление ===\n")
+    # Вывод исходного кода
+    print("Исходный код программы:")
+    print(source_code)
+    print("-" * 60)
     
     # Парсинг программы
-    commands = assembler.assemble(test_program)
+    commands = assembler.assemble(source_code)
     
-    print("Внутреннее представление программы:")
-    for i, cmd in enumerate(commands):
-        print(f"  Команда {i}: {cmd}")
+    print("\nВнутреннее представление программы:")
+    print("-" * 60)
     
-    # Проверка тестовых случаев из спецификации
+    if test_mode:
+        # В режиме тестирования выводим в формате полей и значений
+        print("Формат: Код_операции(Аргументы) -> [байты]")
+        print("-" * 60)
+        
+        for i, cmd in enumerate(commands):
+            if cmd.mnemonic == "LOAD" and len(cmd.args) == 1:
+                const = assembler.parse_number(cmd.args[0])
+                bytes_list = UVMSpec.encode_load_const(const)
+                print(f"Команда {i:2d}: LOAD({const}) -> {[hex(b) for b in bytes_list]}")
+                
+            elif cmd.mnemonic == "READ" and len(cmd.args) == 1:
+                offset = assembler.parse_number(cmd.args[0])
+                bytes_list = UVMSpec.encode_read_mem(offset)
+                print(f"Команда {i:2d}: READ({offset}) -> {[hex(b) for b in bytes_list]}")
+                
+            elif cmd.mnemonic == "WRITE" and len(cmd.args) == 1:
+                addr = assembler.parse_number(cmd.args[0])
+                bytes_list = UVMSpec.encode_write_mem(addr)
+                print(f"Команда {i:2d}: WRITE({addr}) -> {[hex(b) for b in bytes_list]}")
+                
+            elif cmd.mnemonic == "SUB" and len(cmd.args) == 1:
+                addr = assembler.parse_number(cmd.args[0])
+                bytes_list = UVMSpec.encode_sub(addr)
+                print(f"Команда {i:2d}: SUB({addr}) -> {[hex(b) for b in bytes_list]}")
+                
+            else:
+                print(f"Команда {i:2d}: {cmd}")
+    else:
+        # Обычный вывод промежуточного представления
+        for i, cmd in enumerate(commands):
+            print(f"Команда {i:2d}: {cmd}")
+    
+    print("-" * 60)
+    return commands
+
+def test_specification():
+    """Проверяет тестовые случаи из спецификации УВМ"""
     print("\nПроверка тестовых случаев из спецификации УВМ:")
+    print("-" * 60)
     
-    # Тест 1: LOAD_CONST (A=202, B=553)
-    expected1 = [0xCA, 0x29, 0x02, 0x00]
-    result1 = UVMSpec.encode_load_const(553)
-    print(f"  LOAD_CONST тест:")
-    print(f"    Ожидается: {[hex(x) for x in expected1]}")
-    print(f"    Получено:  {[hex(x) for x in result1]}")
-    print(f"    Совпадение: {result1 == expected1}")
+    tests = [
+        ("LOAD 553", 553, UVMSpec.encode_load_const),
+        ("READ 268", 268, UVMSpec.encode_read_mem),
+        ("WRITE 617", 617, UVMSpec.encode_write_mem),
+        ("SUB 455", 455, UVMSpec.encode_sub)
+    ]
     
-    # Тест 2: READ_MEM (A=156, B=268)
-    expected2 = [0x9C, 0x0C, 0x01]
-    result2 = UVMSpec.encode_read_mem(268)
-    print(f"  READ_MEM тест:")
-    print(f"    Ожидается: {[hex(x) for x in expected2]}")
-    print(f"    Получено:  {[hex(x) for x in result2]}")
-    print(f"    Совпадение: {result2 == expected2}")
+    expected_results = [
+        [0xCA, 0x29, 0x02, 0x00],
+        [0x9C, 0x0C, 0x01],
+        [0x5D, 0x69, 0x02, 0x00],
+        [0xAF, 0xC7, 0x01, 0x00]
+    ]
     
-    # Тест 3: WRITE_MEM (A=93, B=617)
-    expected3 = [0x5D, 0x69, 0x02, 0x00]
-    result3 = UVMSpec.encode_write_mem(617)
-    print(f"  WRITE_MEM тест:")
-    print(f"    Ожидается: {[hex(x) for x in expected3]}")
-    print(f"    Получено:  {[hex(x) for x in result3]}")
-    print(f"    Совпадение: {result3 == expected3}")
+    all_passed = True
+    for (name, value, encoder), expected in zip(tests, expected_results):
+        result = encoder(value)
+        passed = result == expected
+        all_passed = all_passed and passed
+        
+        print(f"{name:15} -> Ожидается: {[hex(x) for x in expected]}")
+        print(f"{'':15}   Получено:  {[hex(x) for x in result]}")
+        print(f"{'':15}   Статус:    {'ПРОЙДЕНО' if passed else 'ОШИБКА'}")
+        print()
     
-    # Тест 4: SUB (A=175, B=455)
-    expected4 = [0xAF, 0xC7, 0x01, 0x00]
-    result4 = UVMSpec.encode_sub(455)
-    print(f"  SUB тест:")
-    print(f"    Ожидается: {[hex(x) for x in expected4]}")
-    print(f"    Получено:  {[hex(x) for x in result4]}")
-    print(f"    Совпадение: {result4 == expected4}")
+    return all_passed
+
+def main():
+    import argparse
     
-    # Проверка парсера чисел
-    print("\nПроверка парсера чисел:")
-    test_numbers = ["553", "0x229", "268", "617", "455"]
-    for num_str in test_numbers:
-        parsed = assembler.parse_number(num_str)
-        print(f"  '{num_str}' -> {parsed} (0x{assembler.int_to_hex(parsed)})")
+    parser = argparse.ArgumentParser(
+        description='Ассемблер УВМ - Этап 1: Перевод программы в промежуточное представление',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Примеры использования:
+  python stage1_main.py program.asm            # Обычный режим
+  python stage1_main.py program.asm --test     # Режим тестирования
+  python stage1_main.py --spec-test            # Только проверка спецификации
+        """
+    )
+    
+    parser.add_argument(
+        'input_file',
+        nargs='?',
+        help='Путь к исходному файлу с текстом программы'
+    )
+    
+    parser.add_argument(
+        '--test',
+        action='store_true',
+        help='Режим тестирования (вывод в формате полей и значений)'
+    )
+    
+    parser.add_argument(
+        '--spec-test',
+        action='store_true',
+        help='Проверить только тестовые случаи из спецификации УВМ'
+    )
+    
+    args = parser.parse_args()
+    
+    print("АССЕМБЛЕР УЧЕБНОЙ ВИРТУАЛЬНОЙ МАШИНЫ (УВМ)")
+    print("Вариант 26 - Конфигурационное управление")
+    print("=" * 60)
+    
+    if args.spec_test:
+        # Только проверка спецификации
+        test_specification()
+    elif args.input_file:
+        # Основной режим работы
+        commands = run_stage1(args.input_file, args.test)
+        
+        if args.test:
+            print("\nДополнительная проверка спецификации:")
+            print("-" * 60)
+            test_specification()
+    else:
+        parser.print_help()
+        
+        # Создаем пример программы, если файл не указан
+        print("\n" + "=" * 60)
+        print("Пример программы для тестирования (сохраните как test.asm):")
+        print("=" * 60)
+        example_program = """; Пример программы для УВМ
+; Команды соответствуют тестовым случаям из спецификации
+
+LOAD 553      ; Загрузить константу 553
+READ 268      ; Прочитать из памяти (аккумулятор + 268)
+WRITE 617     ; Записать аккумулятор по адресу 617
+SUB 455       ; Вычесть значение из памяти по адресу 455
+
+; Пример с шестнадцатеричными числами
+LOAD 0x229    ; 553 в hex
+READ 0x10C    ; 268 в hex
+WRITE 0x269   ; 617 в hex
+SUB 0x1C7     ; 455 в hex"""
+        
+        print(example_program)
 
 if __name__ == "__main__":
-    test_stage1()
+    main()
