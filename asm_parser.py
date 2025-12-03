@@ -94,3 +94,15 @@ class Assembler:
             result = hex_digits[n % 16] + result
             n = n // 16
         return result.zfill(digits)
+
+def read_program_file(filename):
+    """Читает программу из файла"""
+    try:
+        with open(filename, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        print(f"Ошибка: файл '{filename}' не найден")
+        return None
+    except Exception as e:
+        print(f"Ошибка при чтении файла: {e}")
+        return None
