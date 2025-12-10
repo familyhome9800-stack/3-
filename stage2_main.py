@@ -1,3 +1,14 @@
+from uvm_spec import UVMSpec
+
+class Command:
+    """Простой класс команды для этапа 2"""
+    def __init__(self, mnemonic, args=None):
+        self.mnemonic = mnemonic
+        self.args = args or []
+    
+    def __repr__(self):
+        return f"Command({self.mnemonic}, {self.args})"
+
 class UVMSpec:
     # Коды операций для варианта 26
     LOAD_CONST = 202    # 0xCA
